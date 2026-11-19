@@ -119,10 +119,10 @@ elseif(ANDROID OR APPLE)
         -fno-strict-aliasing -fno-stack-protector)
 else()
     # Linux (clang): as for Windows - no stack protector (save states keep host stacks, whose
-    # canaries differ per process), no CET (rt_longjmp jumps without the shadow stack), not
+    # canaries differ per process), no CET on x86 (rt_longjmp jumps without the shadow stack), not
     # position-independent (the exe sits at a fixed address)
     target_compile_options(r2game PRIVATE -O2 -Wno-unused-label -Wno-unused-variable -Wno-unused-but-set-variable
-        -fno-strict-aliasing -fno-stack-protector -fcf-protection=none -fno-pie)
+        -fno-strict-aliasing -fno-stack-protector ${_r2_cet} -fno-pie)
 endif()
 # R2_ARCH: the x86-64 level the game and runtime code are compiled for. x86-64-v3 (Haswell /
 # Zen and later: AVX2, FMA, MOVBE, BMI2, LZCNT) makes the PowerPC's fused multiply-adds one
@@ -146,6 +146,10 @@ if(MSVC)
     set(_r2_fp "/clang:-ffp-contract=off")
 else()
     set(_r2_fp "-ffp-contract=off")
+endif()
+# -fcf-protection is x86 CET only; not a valid clang option on AArch64 or other non-x86 targets.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+    set(_r2_cet -fcf-protection=none)
 endif()
 target_compile_options(r2game PRIVATE ${_r2_arch} ${_r2_fp})
 
@@ -277,7 +281,7 @@ else()
     # /DYNAMICBASE:NO on Windows); names in the dynamic symbol table for crash call stacks; the
     # C++ runtime linked in (the Steam Deck's own libstdc++ may be older than the build's);
     # libraries found next to it (an AppImage's usr/lib, or the build tree's).
-    target_compile_options(red_two PRIVATE -fno-strict-aliasing -fno-stack-protector -fcf-protection=none -fno-pie)
+    target_compile_options(red_two PRIVATE -fno-strict-aliasing -fno-stack-protector ${_r2_cet} -fno-pie)
     target_link_options(red_two PRIVATE -no-pie -rdynamic -static-libstdc++ -static-libgcc)
     set_target_properties(red_two PROPERTIES INSTALL_RPATH "$ORIGIN/../lib" BUILD_RPATH_USE_ORIGIN ON)
     target_link_libraries(red_two PRIVATE dl pthread)
