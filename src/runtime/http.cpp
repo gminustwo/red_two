@@ -190,7 +190,7 @@ struct Curl {
 Curl& curl() {
     static Curl c = [] {
         Curl c;
-        for (const char* name : {"libcurl.so.4", "libcurl-gnutls.so.4", "libcurl.so"})
+        for (const char* name : {"libcurl.so.4", "libcurl-gnutls.so.4", "libcurl.so", "/usr/lib/libcurl.4.dylib"})
             if ((c.lib = dlopen(name, RTLD_NOW | RTLD_LOCAL))) break;
         if (!c.lib) {
             logf("http", "libcurl not found: no internet requests (RetroAchievements, updates)");

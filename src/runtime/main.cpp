@@ -22,6 +22,16 @@
 #else
 #include <execinfo.h>
 #endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <pthread.h>
+#include <cstdint>
+static long gettid() {  // (macOS has no gettid: the thread's system-wide id)
+    uint64_t id = 0;
+    pthread_threadid_np(nullptr, &id);
+    return long(id);
+}
+#endif
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -57,6 +67,23 @@
 #include "hw/musyx_dsp.h"
 #include "savestate.h"
 #include "table.h"
+
+#if !defined(_WIN32) && !defined(__ANDROID__)
+// This program's file (Linux: /proc/self/exe; macOS: the loader's, inside Red Two.app)
+static std::string selfExe() {
+#ifdef __APPLE__
+    char buf[PATH_MAX];
+    uint32_t size = sizeof buf;
+    if (_NSGetExecutablePath(buf, &size) != 0) return {};
+    char real[PATH_MAX];
+    return realpath(buf, real) ? real : buf;
+#else
+    char buf[PATH_MAX];
+    const ssize_t n = readlink("/proc/self/exe", buf, sizeof buf - 1);
+    return n > 0 ? std::string(buf, size_t(n)) : std::string();
+#endif
+}
+#endif
 
 namespace rt {
 
@@ -238,7 +265,7 @@ void restartGame(bool toLauncher) {
         args.push_back(nullptr);
         execv(s_restartProgram.c_str(), args.data());
     }
-    if (s_argv) execv("/proc/self/exe", s_argv);
+    if (s_argv) execv(selfExe().c_str(), s_argv);
     logf("main", "restart failed (errno %d)", errno);
     return;
 #else
@@ -749,9 +776,8 @@ static void setupLogOutput(int, char**) {
 
 static void logSessionHeader(int argc, char** argv) {
     using rt::logf;
-    char exe[PATH_MAX] = "";
-    const ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    if (n > 0) exe[n] = 0;
+    const std::string exePath = selfExe();
+    const char* exe = exePath.c_str();
     std::string built = "?";
     struct stat st{};
     if (stat(exe, &st) == 0) {
@@ -857,6 +883,10 @@ static std::string findDisc() {
     std::vector<fs::path> dirs = {fs::current_path()};
     if (const char* base = SDL_GetBasePath()) dirs.push_back(fs::path(std::u8string(base, base + strlen(base))));
     if (const char* ai = getenv("APPIMAGE")) dirs.push_back(fs::path(ai).parent_path());
+#ifdef __APPLE__
+    // macOS: the folder holding Red Two.app (the base path is its Contents/Resources/)
+    if (const char* base = SDL_GetBasePath()) dirs.push_back(fs::path(base).parent_path().parent_path().parent_path().parent_path());
+#endif
     // the user folder (the portable one; Android/data/<package>/files, reachable over USB)
     if (const std::string u = rt::mods::userDir(); !u.empty()) dirs.push_back(fs::path(std::u8string(u.begin(), u.end())));
 #if !defined(_WIN32) && !defined(__ANDROID__)

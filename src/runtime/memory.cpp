@@ -7,6 +7,19 @@
 // stacks go to fixed addresses too: a state then loads in any later session of the same build.
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(__APPLE__)
+// macOS: no memfd (a POSIX shared memory object, unlinked at once), no MAP_FIXED_NOREPLACE (a
+// plain hint, checked below), Mach-O instead of ELF, and the PIE the arm64 loader insists on:
+// as on Android, a state loads only into the session that made it.
+#include <fcntl.h>
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/ucontext.h>
+#include <unistd.h>
+#define MAP_FIXED_NOREPLACE 0
 #else
 #include <link.h>
 #include <pthread.h>
@@ -97,7 +110,15 @@ static unsigned long hostThreadId() { return GetCurrentThreadId(); }
 static pthread_t s_guestThread{};
 static bool s_haveGuestThread = false;
 static bool onGuestThread() { return s_haveGuestThread && pthread_equal(pthread_self(), s_guestThread); }
+#ifdef __APPLE__
+static unsigned long hostThreadId() {
+    uint64_t id = 0;
+    pthread_threadid_np(nullptr, &id);
+    return (unsigned long)id;
+}
+#else
 static unsigned long hostThreadId() { return (unsigned long)gettid(); }
+#endif
 #endif
 
 // The SDK's BATs map 0x80000000-0x8FFFFFFF (cached) and 0xC0000000-0xCFFFFFFF (uncached) to
@@ -168,7 +189,10 @@ static LONG CALLBACK onAccessViolation(EXCEPTION_POINTERS* ep) {
 }
 #else
 // SIGSEGV: guest memory as above; anything else goes to main.cpp's crash report
-#if defined(__aarch64__)
+#if defined(__APPLE__) && defined(__aarch64__)
+// macOS: the syndrome is in the exception state; WnR (bit 6) as below
+static bool faultWasWrite(const ucontext_t* uc) { return (uc->uc_mcontext->__es.__esr >> 6) & 1; }
+#elif defined(__aarch64__)
 // AArch64: the kernel puts the fault's syndrome (ESR) in a record of the signal frame's
 // reserved area; WnR (bit 6) says a data abort was a write.
 static bool faultWasWrite(const ucontext_t* uc) {
@@ -191,7 +215,10 @@ static bool faultWasWrite(const ucontext_t* uc) {
 #endif
 static void onSegv(int sig, siginfo_t* si, void* ucv) {
     const auto* uc = static_cast<const ucontext_t*>(ucv);
-#if defined(__aarch64__)
+#if defined(__APPLE__) && defined(__aarch64__)
+    const bool write = faultWasWrite(uc);
+    const void* at = reinterpret_cast<const void*>(uc->uc_mcontext->__ss.__pc);
+#elif defined(__aarch64__)
     const bool write = faultWasWrite(uc);
     const void* at = reinterpret_cast<const void*>(uc->uc_mcontext.pc);
 #else
@@ -263,6 +290,13 @@ bool memInit() {
     // (bionic has memfd_create from API 30; shared memory of the platform's own from 26)
     s_mem1 = ASharedMemory_create("red_two_mem1", kMem1Mapped);
     if (s_mem1 < 0) return false;
+#elif defined(__APPLE__)
+    char name[64];
+    snprintf(name, sizeof name, "/red_two_mem1.%d", int(getpid()));
+    s_mem1 = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+    if (s_mem1 < 0) return false;
+    shm_unlink(name);  // (the descriptor keeps it)
+    if (ftruncate(s_mem1, kMem1Mapped) != 0) return false;
 #else
     s_mem1 = memfd_create("red_two_mem1", 0);
     if (s_mem1 < 0 || ftruncate(s_mem1, kMem1Mapped) != 0) return false;
@@ -331,6 +365,17 @@ HostLayout hostLayout() {
             },
             nullptr);
     }
+    return {base, hash, u64(g_base), u64(s_stacks)};
+}
+#elif defined(__APPLE__)
+// macOS: the main image (index 0) at its ASLR slide; its code is the __TEXT,__text section.
+HostLayout hostLayout() {
+    static const u64 base = u64(_dyld_get_image_header(0));
+    static const u64 hash = [] {
+        unsigned long size = 0;
+        const u8* text = getsectiondata(reinterpret_cast<const mach_header_64*>(base), "__TEXT", "__text", &size);
+        return text ? XXH3_64bits(text, size) : 0;
+    }();
     return {base, hash, u64(g_base), u64(s_stacks)};
 }
 #elif !defined(_WIN32)

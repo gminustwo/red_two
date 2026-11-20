@@ -8,7 +8,9 @@
 #include <windows.h>
 #include <timeapi.h>
 #else
+#ifdef __linux__
 #include <sys/prctl.h>
+#endif
 #include <time.h>
 #include <condition_variable>
 #endif
@@ -169,7 +171,9 @@ u64 tbNow() {
 void eventsInit() {
     clock_gettime(CLOCK_MONOTONIC, &s_start);
     std::thread([] {
+#ifdef __linux__
         prctl(PR_SET_TIMERSLACK, 1UL, 0, 0, 0);
+#endif
         timerThread();
     }).detach();
 }

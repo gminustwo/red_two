@@ -121,6 +121,9 @@ std::vector<fs::path> dolphinUserDirs(const std::vector<fs::path>&) {
         add(fs::path(d));
         return out;
     }
+#ifdef __APPLE__
+    add(homeDir() / "Library/Application Support/Dolphin");
+#endif
     add(xdg("XDG_DATA_HOME", ".local/share") / "dolphin-emu");
     add(homeDir() / kFlatpak / "data/dolphin-emu");
     add(homeDir() / ".dolphin-emu");

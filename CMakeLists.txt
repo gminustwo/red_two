@@ -102,8 +102,8 @@ if(MSVC)
     # clang-cl: generated code is huge and full of labels
     target_compile_options(r2game PRIVATE /O2 -Wno-unused-label -Wno-unused-variable -Wno-unused-but-set-variable
         -fno-strict-aliasing /GS-)
-elseif(ANDROID)
-    # Android (AArch64, position-independent): no stack protector either (as below)
+elseif(ANDROID OR APPLE)
+    # Android and macOS (AArch64, position-independent): no stack protector either (as below)
     target_compile_options(r2game PRIVATE -O2 -Wno-unused-label -Wno-unused-variable -Wno-unused-but-set-variable
         -fno-strict-aliasing -fno-stack-protector)
 else()
@@ -234,6 +234,25 @@ elseif(ANDROID)
     target_compile_options(red_two PRIVATE -fno-strict-aliasing -fno-stack-protector)
     target_link_options(red_two PRIVATE -Wl,-z,max-page-size=16384 -Wl,--no-undefined)
     target_link_libraries(red_two PRIVATE android log dl)
+elseif(APPLE)
+    # macOS: position-independent (the arm64 loader requires it; save states then load only
+    # within a session, as on Android), no stack protector (as the generated code), a 16 MiB
+    # main-thread stack as on Windows. Built as Red Two.app (tools/build_macos.sh).
+    target_compile_options(red_two PRIVATE -fno-strict-aliasing -fno-stack-protector)
+    target_link_options(red_two PRIVATE -Wl,-stack_size,0x1000000)
+    set_target_properties(red_two PROPERTIES
+        MACOSX_BUNDLE TRUE
+        OUTPUT_NAME "Red Two"
+        MACOSX_BUNDLE_BUNDLE_NAME "Red Two"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.fhclimited.redtwo"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${R2_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${R2_VERSION}"
+        MACOSX_BUNDLE_ICON_FILE "red_two.icns"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/res/Info.plist.in")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/res/red_two.icns")
+        target_sources(red_two PRIVATE res/red_two.icns)
+        set_source_files_properties(res/red_two.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    endif()
 else()
     # Not a position-independent executable (save states hold return addresses into it, as
     # /DYNAMICBASE:NO on Windows); names in the dynamic symbol table for crash call stacks; the

@@ -63,6 +63,22 @@ same folder (or the disc into `~/Emulation/roms/gc`), make the AppImage executab
 to Steam as a non-Steam game. The first start on a Deck is fullscreen with the picture as wide
 as the screen. Settings, saves, states and logs live in `~/.local/share/Red Two/`.
 
+## Building (macOS, Apple Silicon)
+
+Requirements: the Xcode command line tools (`xcode-select --install`), CMake 3.25+ and Ninja
+(`brew install cmake ninja`). Dawn (Metal), SDL3 and the other libraries are fetched and linked
+in statically: the app needs nothing installed to run.
+
+```bash
+tools/build_macos.sh --disc "<your Rogue Leader.rvz>"     # -> build/macos/Red Two.app
+```
+
+Copy `Red Two.app` anywhere; a disc image in the same folder as the app is found by itself.
+Settings, saves, states and logs live in `~/Library/Application Support/Red Two/`. The arm64
+loader allows only position-independent programs, so (as on Android) a save state loads only
+into the session that made it; the game's own saves on the memory card are not affected. The
+app is signed ad hoc for this Mac: on another one, right-click > Open the first time.
+
 ### Playing
 
 - **Launcher**: Red Two opens on its settings (the same pages as the in-game menu) before the
@@ -88,7 +104,8 @@ as the screen. Settings, saves, states and logs live in `~/.local/share/Red Two/
   holds settings, the memory card, save states, logs, texture packs, codes and the shader cache,
   so the folder can live anywhere (another drive, a NAS). An install that has no `user` folder
   but an older `%APPDATA%\Red Two` keeps using that one; create `user` to make it portable (its
-  first start copies the settings, controls and memory card over). Linux: `~/.local/share/Red Two/`.
+  first start copies the settings, controls and memory card over). Linux: `~/.local/share/Red Two/`;
+  macOS: `~/Library/Application Support/Red Two/`.
 - **Cheats** (F1 > Cheats): invincibility, infinite lives, infinite bombs, perfect mission
   stats (the results screen says 0:01, every enemy destroyed, 100% accuracy, no friendlies or
   lives lost and 100% targeting computer efficiency, and the medal is awarded for those), and
@@ -151,6 +168,7 @@ report one problem per issue. What to have at hand:
   - Windows: `user\logs` next to `red_two.exe` (an older install without a `user` folder:
     `%APPDATA%\Red Two\logs`)
   - Steam Deck / Linux: `~/.local/share/Red Two/logs`
+  - macOS: `~/Library/Application Support/Red Two/logs`
 
   It lists your settings, the frame rate every 30 seconds, and what the game was doing in a
   freeze or a crash. It also shows folder paths, which can include your user name: edit those
