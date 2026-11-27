@@ -1,0 +1,13 @@
+diff --git a/lib/gx/command_processor.cpp b/lib/gx/command_processor.cpp
+index 1111111..2222222 100644
+--- a/lib/gx/command_processor.cpp
++++ b/lib/gx/command_processor.cpp
+@@ -462,7 +462,7 @@ ProjScale perspective_scale(float k, float v) noexcept {
+   // aspect: a 2.12:1 window passed the 1% test below and such frames were squeezed by 1 / v
+   // (cards and movies stopped short of the top and bottom).
+   const bool letterboxCamera =
+-      v > 1.f && p0 != 0.f && std::abs(std::abs(p2 / p0) / (logicalAspect * v) - 1.f) < 0.002f;
++      v > 1.f && p0 != 0.f && std::abs(std::abs(p2 / p0) / (logicalAspect * v) - 1.f) < 0.02f;
+   if (!letterboxCamera && p0 != 0.f && std::abs(std::abs(p2 / p0) / (logicalAspect * k) - 1.f) < 0.01f) {
+     return {1.f, 1.f / v, 1.f / k, xAdd};
+   }
